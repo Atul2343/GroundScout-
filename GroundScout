@@ -1,0 +1,288 @@
+/package.json
+{
+  "name": "groundscout",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "prepare:android": "npm run build && npx cap copy android"
+  },
+  "dependencies": {
+    "@capacitor/core": "^5.0.0",
+    "firebase": "^10.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.14.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.28",
+    "@types/react-dom": "^18.0.11",
+    "typescript": "^5.1.6",
+    "vite": "^5.0.0",
+    "@vitejs/plugin-react": "^4.0.0"
+  }
+}
+
+/vite.config.ts
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  server: { port: 5173 }
+})
+
+/index.html
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GroundScout</title>
+    <link rel="manifest" href="/manifest.json" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
+/tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["DOM","ES2020"],
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true
+  },
+  "include": ["src"]
+}
+
+/capacitor.config.json
+{
+  "appId": "com.tryrelaxbyte.groundscout",
+  "appName": "GroundScout",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}
+
+/public/manifest.json
+{
+  "name": "GroundScout",
+  "short_name": "GroundScout",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0d6efd",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
+
+/public/service-worker.js
+self.addEventListener('install', function(event) {
+  event.waitUntil(
+    caches.open('groundscout-v1').then(function(cache) {
+      return cache.addAll(['/', '/index.html']);
+    })
+  );
+});
+self.addEventListener('fetch', function(event) {
+  event.respondWith(caches.match(event.request).then(function(resp) { return resp || fetch(event.request); }));
+});
+
+/src/main.tsx
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import App from './App'
+import Login from './pages/Login'
+import Home from './pages/Home'
+import './styles.css'
+
+createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<App />}>
+          <Route index element={<Navigate to="/home" replace />} />
+          <Route path="login" element={<Login />} />
+          <Route path="home" element={<Home />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  </React.StrictMode>
+)
+
+/src/firebase.ts
+// Put your Firebase config in .env (see README). Example below.
+import { initializeApp } from 'firebase/app'
+import { getAuth } from 'firebase/auth'
+
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "YOUR_API_KEY",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "YOUR_AUTH_DOMAIN",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "YOUR_PROJECT_ID",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "YOUR_STORAGE_BUCKET",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "SENDER_ID",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "APP_ID"
+}
+
+const app = initializeApp(firebaseConfig)
+export const auth = getAuth(app)
+
+/src/App.tsx
+import React from 'react'
+import { Outlet, Link } from 'react-router-dom'
+
+export default function App() {
+  return (
+    <div className="app">
+      <header className="topbar">
+        <h1>GroundScout</h1>
+        <nav>
+          <Link to="/login">Login</Link> | <Link to="/home">Home</Link>
+        </nav>
+      </header>
+      <main className="main">
+        <Outlet />
+      </main>
+    </div>
+  )
+}
+
+/src/pages/Login.tsx
+import React, { useState } from 'react'
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth'
+import { auth } from '../firebase'
+import { useNavigate } from 'react-router-dom'
+
+export default function Login() {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [mode, setMode] = useState<'login'|'signup'>('login')
+  const [error, setError] = useState('')
+  const nav = useNavigate()
+
+  const handle = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    try{
+      if(mode === 'login'){
+        await signInWithEmailAndPassword(auth, email, password)
+      } else {
+        await createUserWithEmailAndPassword(auth, email, password)
+      }
+      nav('/home')
+    }catch(err:any){
+      setError(err.message || 'Auth error')
+    }
+  }
+
+  return (
+    <div className="card">
+      <h2>{mode === 'login' ? 'Login' : 'Sign up'}</h2>
+      <form onSubmit={handle}>
+        <input placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} />
+        <input placeholder="Password" type="password" value={password} onChange={e=>setPassword(e.target.value)} />
+        <button type="submit">{mode === 'login' ? 'Login' : 'Create account'}</button>
+      </form>
+      <p className="error">{error}</p>
+      <p>
+        <button onClick={()=>setMode(mode==='login'?'signup':'login')}>Switch to {mode==='login'?'Sign up':'Login'}</button>
+      </p>
+    </div>
+  )
+}
+
+/src/pages/Home.tsx
+import React, { useEffect, useState } from 'react'
+import { onAuthStateChanged, signOut } from 'firebase/auth'
+import { auth } from '../firebase'
+
+export default function Home() {
+  const [user, setUser] = useState<any>(null)
+  useEffect(()=> {
+    const unsub = onAuthStateChanged(auth, u => setUser(u))
+    return () => unsub()
+  },[])
+  return (
+    <div className="card">
+      <h2>Welcome to GroundScout</h2>
+      {user ? (
+        <>
+          <p>Signed in as {user.email}</p>
+          <button onClick={()=>signOut(auth)}>Sign out</button>
+        </>
+      ) : (
+        <p>Please <a href="/login">login</a>.</p>
+      )}
+      <section>
+        <h3>Quick property scouting</h3>
+        <p>Map & property tools will go here (you already had UI components — add them inside this page).</p>
+      </section>
+    </div>
+  )
+}
+
+/src/styles.css
+body { font-family: system-ui, Arial; margin:0; background:#f5f7fb; color:#111 }
+.topbar { background:#0d6efd; color:white; padding:12px 16px; display:flex; justify-content:space-between; align-items:center }
+.topbar a { color:white; text-decoration:none; margin-left:8px }
+.main { padding:16px }
+.card { background:white; padding:16px; border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,0.06); max-width:720px; margin:12px auto }
+
+/src/types.ts
+export type Property = {
+  id?: string
+  title: string
+  location: string
+  areaSqm?: number
+  price?: number
+}
+
+/public/icons/icon-192.png
+[add a 192x192 png icon file here or placeholder]
+
+/public/icons/icon-512.png
+[add a 512x512 png icon file here or placeholder]
+
+/.env.example
+VITE_FIREBASE_API_KEY=YOUR_API_KEY
+VITE_FIREBASE_AUTH_DOMAIN=YOUR_AUTH_DOMAIN
+VITE_FIREBASE_PROJECT_ID=YOUR_PROJECT_ID
+VITE_FIREBASE_STORAGE_BUCKET=YOUR_STORAGE_BUCKET
+VITE_FIREBASE_MESSAGING_SENDER_ID=YOUR_MESSAGING_SENDER_ID
+VITE_FIREBASE_APP_ID=YOUR_APP_ID
+
+/README.md
+# GroundScout (Capacitor-ready)
+
+## Quick start (mobile-friendly)
+1. Create a new Firebase Web app, copy config keys into `.env` (see `.env.example`).
+2. On phone: create new GitHub repo, add these files (create files via "Create new file") and commit.
+3. On your PC (or Appflow cloud) run:
+   - `npm install`
+   - `npm run build`
+   - `npm install @capacitor/cli @capacitor/core`
+   - `npx cap init com.tryrelaxbyte.groundscout GroundScout --web-dir=dist`
+   - `npx cap add android`
+   - `npx cap copy android`
+   - `npx cap open android` (then Generate Signed APK)
+
+## Notes
+- For Android Firebase native integration, put `google-services.json` into `android/app/`.
+- This template uses email/password auth using Firebase Auth. You can enable Google in Firebase Console and add Google provider later.
+
+/BUILD_ANDROID.md
+(Use the BUILD_ANDROID.md we made earlier — includes Firebase steps and signing example)
